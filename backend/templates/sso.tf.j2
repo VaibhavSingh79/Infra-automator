@@ -1,0 +1,20 @@
+# Auto-generated Standard IAM Group
+resource "aws_iam_group" "{{ group.group_name | replace('-', '_') | lower }}" {
+  name = "{{ group.group_name }}"
+}
+
+{% for user_email in group.users %}
+# Create IAM User for {{ user_email }}
+resource "aws_iam_user" "{{ user_email | replace('@', '_') | replace('.', '_') }}" {
+  name = "{{ user_email }}"
+}
+
+# Attach User to the IAM Group
+resource "aws_iam_user_group_membership" "{{ user_email | replace('@', '_') | replace('.', '_') }}_membership" {
+  user = aws_iam_user.{{ user_email | replace('@', '_') | replace('.', '_') }}.name
+
+  groups = [
+    aws_iam_group.{{ group.group_name | replace('-', '_') | lower }}.name
+  ]
+}
+{% endfor %}

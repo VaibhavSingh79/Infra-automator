@@ -1,0 +1,12 @@
+aws_region = "ap-south-1"
+
+# Your GitHub username (personal) or org — all repos under it are trusted.
+github_owner       = "your-github-username"
+github_target_repo = "your-github-username/your-repo"   # must be under github_owner
+
+# All three must be globally unique across S3.
+state_bucket_name = "your-org-infraorchestrator-tfstate-<unique>"
+jobs_bucket_name  = "your-org-infraorchestrator-jobs-<unique>"
+
+# Demo: gate off (no extra GitHub setup). Post-demo: true + create the environment.
+use_environment_gate = false

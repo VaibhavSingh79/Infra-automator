@@ -1,0 +1,106 @@
+# Generated Terraform for VPC: {{ vpc.vpc_name }}
+
+resource "aws_vpc" "{{ vpc.vpc_name | replace('-', '_') }}" {
+  cidr_block           = "{{ vpc.vpc_cidr }}"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+  tags = {
+    Name        = "{{ vpc.vpc_name }}"
+    Environment = "POC"
+    AccountName = "{{ vpc.account_name }}"
+  }
+}
+
+# Internet Gateway
+resource "aws_internet_gateway" "{{ vpc.vpc_name | replace('-', '_') }}_igw" {
+  vpc_id = aws_vpc.{{ vpc.vpc_name | replace('-', '_') }}.id
+  tags = { Name = "{{ vpc.vpc_name }}-igw" }
+}
+
+{% if vpc.subnets %}
+# ── Subnets ────────────────────────────────────────────────
+{% for subnet in vpc.subnets %}
+resource "aws_subnet" "{{ subnet.name | replace('-', '_') | replace('.', '_') }}" {
+  vpc_id     = aws_vpc.{{ vpc.vpc_name | replace('-', '_') }}.id
+  cidr_block = "{{ subnet.cidr }}"
+
+  # LB subnets and explicitly-public subnets get public IPs
+  map_public_ip_on_launch = {% if '-lb' in subnet.name | lower or subnet.route_table_association | lower == 'public' %}true{% else %}false{% endif %}
+
+  tags = {
+    Name = "{{ subnet.name }}"
+    Tier = "{{ subnet.route_table_association | default('public') }}"
+    Type = "{% if '-lb' in subnet.name | lower %}load-balancer{% elif subnet.route_table_association | lower == 'private' %}private{% else %}public{% endif %}"
+  }
+}
+{% endfor %}
+{% endif %}
+
+# ── Public Route Table ──────────────────────────────────────
+resource "aws_route_table" "{{ vpc.vpc_name | replace('-', '_') }}_public_rt" {
+  vpc_id = aws_vpc.{{ vpc.vpc_name | replace('-', '_') }}.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.{{ vpc.vpc_name | replace('-', '_') }}_igw.id
+  }
+  tags = { Name = "{{ vpc.vpc_name }}-public-rt" }
+}
+
+{% if vpc.nat_gateway %}
+# ── EIP + NAT Gateway ──────────────────────────────────────
+resource "aws_eip" "{{ vpc.vpc_name | replace('-', '_') }}_nat_eip" {
+  domain = "vpc"
+  tags = { Name = "{{ vpc.vpc_name }}-nat-eip" }
+}
+
+# NAT placed in first LB subnet if available, else first public subnet
+resource "aws_nat_gateway" "{{ vpc.vpc_name | replace('-', '_') }}_nat" {
+  allocation_id = aws_eip.{{ vpc.vpc_name | replace('-', '_') }}_nat_eip.id
+  subnet_id     = aws_subnet.{{ (vpc.subnets | selectattr('route_table_association', 'equalto', 'public') | list or vpc.subnets)[0].name | replace('-', '_') | replace('.', '_') }}.id
+  tags          = { Name = "{{ vpc.vpc_name }}-nat" }
+  depends_on    = [aws_internet_gateway.{{ vpc.vpc_name | replace('-', '_') }}_igw]
+}
+
+# ── Private Route Table ────────────────────────────────────
+resource "aws_route_table" "{{ vpc.vpc_name | replace('-', '_') }}_private_rt" {
+  vpc_id = aws_vpc.{{ vpc.vpc_name | replace('-', '_') }}.id
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.{{ vpc.vpc_name | replace('-', '_') }}_nat.id
+  }
+  tags = { Name = "{{ vpc.vpc_name }}-private-rt" }
+}
+{% endif %}
+
+# ── Route Table Associations ───────────────────────────────
+{% if vpc.subnets %}
+{% for subnet in vpc.subnets %}
+{% set sname = subnet.name | replace('-', '_') | replace('.', '_') %}
+{% set tier = subnet.route_table_association | lower | default('public') %}
+{% set is_lb = '-lb' in subnet.name | lower %}
+
+{% if tier == 'private' and not is_lb %}
+# {{ subnet.name }} → private route table (via NAT)
+{% if vpc.nat_gateway %}
+resource "aws_route_table_association" "{{ sname }}_rta" {
+  subnet_id      = aws_subnet.{{ sname }}.id
+  route_table_id = aws_route_table.{{ vpc.vpc_name | replace('-', '_') }}_private_rt.id
+}
+{% else %}
+# WARNING: {{ subnet.name }} is tagged private but no NAT gateway exists — falling back to public RT
+resource "aws_route_table_association" "{{ sname }}_rta" {
+  subnet_id      = aws_subnet.{{ sname }}.id
+  route_table_id = aws_route_table.{{ vpc.vpc_name | replace('-', '_') }}_public_rt.id
+}
+{% endif %}
+
+{% else %}
+# {{ subnet.name }} → public route table{% if is_lb %} (LB subnet){% endif %}
+resource "aws_route_table_association" "{{ sname }}_rta" {
+  subnet_id      = aws_subnet.{{ sname }}.id
+  route_table_id = aws_route_table.{{ vpc.vpc_name | replace('-', '_') }}_public_rt.id
+}
+{% endif %}
+
+{% endfor %}
+{% endif %}

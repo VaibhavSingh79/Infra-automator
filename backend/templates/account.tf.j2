@@ -1,0 +1,11 @@
+# Generated Account Config for {{ account.account_name }}
+resource "aws_organizations_account" "{{ account.account_name | replace(' ', '_') | lower }}" {
+  name  = "{{ account.account_name }}"
+  email = "{{ account.email }}"
+  
+  tags = {
+    OrganizationUnit = "{{ account.organization_unit }}"
+    PrimaryRegion    = "{{ account.primary_region }}"
+    DRRegion         = "{{ account.dr_region }}"
+  }
+}

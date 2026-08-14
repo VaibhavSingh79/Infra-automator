@@ -1,0 +1,33 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+
+# Env files (real secrets/config) — commit only *.env.example
+.env
+.env.*
+!.env.example
+!*/.env.example
+
+# Terraform local state & provider cache — never commit real state
+**/.terraform/
+*.tfstate
+*.tfstate.*
+
+# Terraform variable files (real account/bucket/repo values) — commit only *.tfvars.example
+*.tfvars
+!*.tfvars.example
+
+# Auto-generated Terraform output (per-run, contains client-specific data)
+generated_tf_output/
+
+# Client/prerequisites data — may contain real customer architecture details
+*Prerequisites*.xlsx
+
+# OS/editor cruft
+.DS_Store

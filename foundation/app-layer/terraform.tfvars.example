@@ -1,0 +1,4 @@
+aws_region           = "ap-south-1"
+jobs_bucket_name     = "<paste central-account output: jobs_bucket>"
+frontend_bucket_name = "your-org-infraorchestrator-frontend-<unique>"  # globally unique
+image_tag            = "latest"
